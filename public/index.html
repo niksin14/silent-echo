@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SILENT // ECHO - Deconstruct Media Streams</title>
+  <meta name="description" content="A premium, silent-vibe online engine to deconstruct YouTube and Instagram media streams into high-quality MP3 and MP4 feeds. Fast, clean, and minimal.">
+  
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  
+  <!-- Main Stylesheet -->
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <!-- Dynamic Anime speed lines & slash animation canvas -->
+  <canvas id="bgCanvas"></canvas>
+
+  <!-- Ambient background glows -->
+  <div class="ambient-glow glow-1"></div>
+  <div class="ambient-glow glow-2"></div>
+  <div class="background-character"></div>
+  <div class="noise-overlay"></div>
+
+  <div class="app-container">
+    <header class="app-header">
+      <div class="logo-area">
+        <span class="logo-dot"></span>
+        <h1 class="logo-text">SILENT // ECHO</h1>
+      </div>
+      <p class="tagline">Deconstruct media frequencies into pure audio & video feeds.</p>
+    </header>
+
+    <main class="app-main">
+      <!-- Main Glass Card -->
+      <section class="converter-card" id="converterCard">
+        <!-- URL Input Wrapper -->
+        <div class="input-group">
+          <div class="input-prefix" id="urlIconPrefix">
+            <!-- Default Link Icon -->
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-icon icon-default">
+              <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
+              <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
+            </svg>
+            
+            <!-- YouTube Icon (Hidden by default) -->
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-icon icon-youtube hidden">
+              <path d="M22.54 6.42a2.78 2.78 0 0 0-1.94-2C18.88 4 12 4 12 4s-6.88 0-8.6.46a2.78 2.78 0 0 0-1.94 2A29 29 0 0 0 1 11.75a29 29 0 0 0 .46 5.33A2.78 2.78 0 0 0 3.4 19c1.72.46 8.6.46 8.6.46s6.88 0 8.6-.46a2.78 2.78 0 0 0 1.94-2 29 29 0 0 0 .46-5.25 29 29 0 0 0-.46-5.33z"></path>
+              <polygon points="9.75 15.02 15.5 11.75 9.75 8.48 9.75 15.02"></polygon>
+            </svg>
+
+            <!-- Instagram Icon (Hidden by default) -->
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-icon icon-instagram hidden">
+              <rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect>
+              <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path>
+              <line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line>
+            </svg>
+          </div>
+          
+          <input type="text" id="urlInput" placeholder="Paste link here..." autocomplete="off" spellcheck="false">
+          
+          <button id="analyzeBtn" class="btn-icon-only" title="Analyze link">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-icon">
+              <polyline points="9 18 15 12 9 6"></polyline>
+            </svg>
+          </button>
+        </div>
+
+        <!-- Video Preview Area (Fades in once metadata loads) -->
+        <div class="video-preview-card hidden" id="videoPreview">
+          <div class="preview-thumbnail-wrapper">
+            <img src="" alt="Video thumbnail" id="previewThumb" class="preview-thumbnail">
+            <span class="preview-duration" id="previewDuration">0:00</span>
+          </div>
+          <div class="preview-details">
+            <h3 class="preview-title" id="previewTitle">Video Title</h3>
+            <p class="preview-uploader" id="previewUploader">Channel / Creator</p>
+          </div>
+        </div>
+
+        <!-- Download & Format Selection Panel -->
+        <div class="options-panel">
+          <div class="option-row">
+            <label class="section-label">Select Format</label>
+            <div class="format-toggle-group">
+              <button class="toggle-btn active" data-format="mp3" id="formatMp3">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="btn-icon">
+                  <path d="M9 18V5l12-2v13"></path>
+                  <circle cx="6" cy="18" r="3"></circle>
+                  <circle cx="18" cy="16" r="3"></circle>
+                </svg>
+                Audio (MP3)
+              </button>
+              <button class="toggle-btn" data-format="mp4" id="formatMp4">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="btn-icon">
+                  <rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"></rect>
+                  <line x1="7" y1="2" x2="7" y2="22"></line>
+                  <line x1="17" y1="2" x2="17" y2="22"></line>
+                  <line x1="2" y1="12" x2="22" y2="12"></line>
+                  <line x1="2" y1="7" x2="7" y2="7"></line>
+                  <line x1="2" y1="17" x2="7" y2="17"></line>
+                  <line x1="17" y1="17" x2="22" y2="17"></line>
+                  <line x1="17" y1="7" x2="22" y2="7"></line>
+                </svg>
+                Video (MP4)
+              </button>
+            </div>
+          </div>
+
+          <div class="option-row">
+            <label class="section-label" for="qualitySelect">Quality Preference</label>
+            <div class="select-wrapper">
+              <select id="qualitySelect">
+                <!-- Dynamically populated based on MP3 or MP4 -->
+                <option value="320">320 kbps (High Quality)</option>
+                <option value="256">256 kbps</option>
+                <option value="192">192 kbps (Medium Quality)</option>
+                <option value="128">128 kbps (Low Quality)</option>
+              </select>
+              <div class="select-arrow">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="6 9 12 15 18 9"></polyline>
+                </svg>
+              </div>
+            </div>
+          </div>
+
+          <button id="downloadBtn" class="btn-primary" disabled>
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="btn-icon btn-download-icon">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="7 10 12 15 17 10"></polyline>
+              <line x1="12" y1="15" x2="12" y2="3"></line>
+            </svg>
+            <span>Convert & Download</span>
+          </button>
+        </div>
+
+        <!-- Progress Tracking Block (Hidden by default) -->
+        <div class="progress-panel hidden" id="progressPanel">
+          <div class="progress-header">
+            <span class="status-badge" id="statusBadge">Connecting...</span>
+            <span class="speed-indicator" id="speedIndicator">0.0 MB/s</span>
+          </div>
+
+          <div class="progress-track">
+            <div class="progress-bar" id="progressBar" style="width: 0%;"></div>
+          </div>
+
+          <div class="progress-footer">
+            <span class="eta-indicator" id="etaIndicator">ETA: --:--</span>
+            <span class="percent-indicator" id="percentIndicator">0%</span>
+          </div>
+
+          <!-- Monospace mini logs -->
+          <div class="mini-logs" id="miniLogs">
+            <div class="log-line">Initializing silent convert worker...</div>
+          </div>
+
+          <div class="progress-actions">
+            <button id="cancelBtn" class="btn-secondary">
+              Cancel Process
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- History Section -->
+      <section class="history-section hidden" id="historySection">
+        <div class="history-header">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="section-icon">
+            <path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+          </svg>
+          <h2>Recent Conversions</h2>
+          <button id="clearHistoryBtn" class="btn-text-link">Clear</button>
+        </div>
+        <div class="history-list" id="historyList">
+          <!-- Populated dynamically -->
+        </div>
+      </section>
+    </main>
+
+    <footer class="app-footer">
+      <div class="footer-status">
+        <span class="status-dot green" id="coreStatusDot"></span>
+        <span class="status-text" id="coreStatusText">Core: Checking system...</span>
+        <button id="updateCoreBtn" class="btn-text-link hidden" title="Update downloader binary">Update Core</button>
+      </div>
+      <p class="copyright">&copy; 2026 Silent Echo. Powered by yt-dlp & FFmpeg. Private & Offline.</p>
+    </footer>
+  </div>
+
+  <!-- Custom Alert Toast -->
+  <div id="toast" class="toast-container hidden">
+    <div class="toast-content">
+      <span id="toastMessage">An error occurred.</span>
+    </div>
+  </div>
+
+  <!-- Main Application Logic -->
+  <script src="app.js"></script>
+</body>
+</html>

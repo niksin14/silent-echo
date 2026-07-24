@@ -1,0 +1,14 @@
+{
+  "name": "silent-converter",
+  "version": "1.0.0",
+  "description": "A silent-vibe YouTube & Instagram Video/Audio Downloader",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "ffmpeg-static": "^5.2.0"
+  }
+}
