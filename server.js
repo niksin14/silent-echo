@@ -102,7 +102,11 @@ app.get('/api/info', async (req, res) => {
   console.log(`Fetching info for: ${videoUrl}`);
 
   // Fetch metadata using yt-dlp -J (JSON output)
-  const args = ['-J', '--no-playlist', '--impersonate', 'chrome', videoUrl];
+  const args = ['-J', '--no-playlist', '--impersonate', 'chrome'];
+  if (process.env.PROXY_URL) {
+    args.push('--proxy', process.env.PROXY_URL);
+  }
+  args.push(videoUrl);
   const child = spawn(YT_DLP_PATH, args);
 
   let stdout = '';
@@ -187,6 +191,9 @@ app.get('/api/download', async (req, res) => {
   args.push('--progress');
   args.push('--newline');
   args.push('--impersonate', 'chrome');
+  if (process.env.PROXY_URL) {
+    args.push('--proxy', process.env.PROXY_URL);
+  }
 
   if (format === 'mp3') {
     args.push('-x');
