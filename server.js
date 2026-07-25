@@ -13,7 +13,12 @@ const isWindows = process.platform === 'win32';
 const YT_DLP_BINARY_NAME = isWindows ? 'yt-dlp.exe' : 'yt-dlp';
 const BIN_DIR = path.join(__dirname, 'bin');
 const DOWNLOADS_DIR = path.join(__dirname, 'temp_downloads');
-const YT_DLP_PATH = path.join(BIN_DIR, YT_DLP_BINARY_NAME);
+
+// If running in Docker container, check for pre-installed global yt-dlp first
+let YT_DLP_PATH = path.join(BIN_DIR, YT_DLP_BINARY_NAME);
+if (!isWindows && fs.existsSync('/usr/local/bin/yt-dlp')) {
+  YT_DLP_PATH = '/usr/local/bin/yt-dlp';
+}
 
 // Ensure directories exist
 if (!fs.existsSync(BIN_DIR)) {
@@ -61,8 +66,8 @@ function downloadFile(url, dest) {
 
 // Ensure yt-dlp is available and download it if missing
 async function ensureYtDlp() {
-  if (fs.existsSync(YT_DLP_PATH)) {
-    console.log(`${YT_DLP_BINARY_NAME} is already present.`);
+  if (YT_DLP_PATH === '/usr/local/bin/yt-dlp' || fs.existsSync(YT_DLP_PATH)) {
+    console.log(`${YT_DLP_BINARY_NAME} is ready to use.`);
     return;
   }
   console.log(`${YT_DLP_BINARY_NAME} not found. Downloading latest version from GitHub...`);
