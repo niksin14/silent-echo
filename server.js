@@ -109,6 +109,11 @@ app.get('/api/info', async (req, res) => {
   args.push(videoUrl);
   const child = spawn(YT_DLP_PATH, args);
 
+  child.on('error', (err) => {
+    console.error('Failed to start yt-dlp process in /api/info:', err);
+    return res.status(500).json({ error: 'Failed to start downloader.' });
+  });
+
   let stdout = '';
   let stderr = '';
 
@@ -226,6 +231,12 @@ app.get('/api/download', async (req, res) => {
   sendEvent('status', { phase: 'starting', message: 'Initializing download queue...' });
 
   const child = spawn(YT_DLP_PATH, args);
+
+  child.on('error', (err) => {
+    console.error('Failed to start yt-dlp process in /api/download:', err);
+    sendEvent('error', { message: 'Failed to start downloader process.' });
+    res.end();
+  });
 
   // Regex to extract percent, size, speed, and eta from yt-dlp stdout
   // Example: [download]  12.3% of 45.67MiB at  3.45MiB/s ETA 00:10
