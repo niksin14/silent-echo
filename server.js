@@ -2,10 +2,34 @@ const express = require('express');
 const https = require('https');
 const fs = require('fs');
 const path = require('path');
-const { spawn } = require('child_process');
+const { spawn, execSync } = require('child_process');
 const ffmpegPath = require('ffmpeg-static');
 
+// -------------------------------------------------------------
+// DIAGNOSTICS & SYSTEM LOGGING (Isolated block)
+// -------------------------------------------------------------
+process.on('uncaughtException', (err) => {
+  console.error('DIAGNOSTICS - UNCAUGHT EXCEPTION:', err);
+});
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('DIAGNOSTICS - UNHANDLED REJECTION at:', promise, 'reason:', reason);
+});
+
 const app = express();
+
+app.use((req, res, next) => {
+  req.id = `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+  const safeHeaders = { ...req.headers };
+  delete safeHeaders.authorization;
+  delete safeHeaders.cookie;
+  delete safeHeaders.token;
+  
+  console.log(`[REQ ID: ${req.id}] [${new Date().toISOString()}] ${req.method} ${req.url}`);
+  console.log(`[REQ ID: ${req.id}] Headers:`, JSON.stringify(safeHeaders));
+  next();
+});
+// -------------------------------------------------------------
+
 const PORT = process.env.PORT || 3000;
 
 // Directories and Platform Detection
@@ -88,6 +112,7 @@ async function ensureYtDlp() {
 
 // Route to fetch video info (metadata preview)
 app.get('/api/info', async (req, res) => {
+  const reqId = req.id || 'N/A';
   const videoUrl = req.query.url;
   if (!videoUrl) {
     return res.status(400).json({ error: 'URL parameter is required' });
@@ -96,10 +121,12 @@ app.get('/api/info', async (req, res) => {
   try {
     await ensureYtDlp();
   } catch (err) {
+    console.error(`[REQ ID: ${reqId}] Downloader binary error:`, err);
     return res.status(500).json({ error: 'Downloader binary is not ready.' });
   }
 
-  console.log(`Fetching info for: ${videoUrl}`);
+  console.log(`[REQ ID: ${reqId}] Fetching info for: ${videoUrl}`);
+  logEnvironmentDetails(reqId);
 
   // Fetch metadata using yt-dlp -J (JSON output)
   const args = ['-J', '--no-playlist', '--impersonate', 'chrome'];
@@ -107,10 +134,12 @@ app.get('/api/info', async (req, res) => {
     args.push('--proxy', process.env.PROXY_URL);
   }
   args.push(videoUrl);
+  
+  console.log(`[REQ ID: ${reqId}] Spawning command: "${YT_DLP_PATH}" with args:`, JSON.stringify(args));
   const child = spawn(YT_DLP_PATH, args);
 
   child.on('error', (err) => {
-    console.error('Failed to start yt-dlp process in /api/info:', err);
+    console.error(`[REQ ID: ${reqId}] Failed to start yt-dlp process in /api/info:`, err);
     return res.status(500).json({ error: 'Failed to start downloader.' });
   });
 
@@ -118,16 +147,21 @@ app.get('/api/info', async (req, res) => {
   let stderr = '';
 
   child.stdout.on('data', (data) => {
-    stdout += data.toString();
+    const chunk = data.toString();
+    console.log(`[REQ ID: ${reqId}] yt-dlp stdout chunk (${chunk.length} chars)`);
+    stdout += chunk;
   });
 
   child.stderr.on('data', (data) => {
-    stderr += data.toString();
+    const chunk = data.toString();
+    console.log(`[REQ ID: ${reqId}] yt-dlp stderr:`, chunk.trim());
+    stderr += chunk;
   });
 
   child.on('close', (code) => {
+    console.log(`[REQ ID: ${reqId}] yt-dlp process closed with code: ${code}`);
     if (code !== 0) {
-      console.error(`yt-dlp info failed with code ${code}:`, stderr);
+      console.error(`[REQ ID: ${reqId}] yt-dlp info failed with code ${code}. Stderr:`, stderr);
       return res.status(400).json({ error: 'Failed to retrieve video information. Check the URL.' });
     }
 
@@ -158,6 +192,7 @@ app.get('/api/info', async (req, res) => {
 
 // Route to trigger conversion & download with Server-Sent Events (SSE) progress update
 app.get('/api/download', async (req, res) => {
+  const reqId = req.id || 'N/A';
   const videoUrl = req.query.url;
   const format = req.query.format || 'mp4'; // mp3 or mp4
   const quality = req.query.quality || 'best'; // 320, 256, 192, 128 for mp3, or 1080, 720, 480 for mp4
@@ -169,8 +204,12 @@ app.get('/api/download', async (req, res) => {
   try {
     await ensureYtDlp();
   } catch (err) {
+    console.error(`[REQ ID: ${reqId}] Downloader binary error in /api/download:`, err);
     return res.status(500).json({ error: 'Downloader binary is not ready.' });
   }
+
+  console.log(`[REQ ID: ${reqId}] Triggering download format: ${format}, quality: ${quality} for: ${videoUrl}`);
+  logEnvironmentDetails(reqId);
 
   // Setup SSE Headers
   res.writeHead(200, {
@@ -227,13 +266,13 @@ app.get('/api/download', async (req, res) => {
   args.push('-o', outputPath);
   args.push(videoUrl);
 
-  console.log(`Starting spawn for fileId: ${fileId}. Args:`, args.join(' '));
+  console.log(`[REQ ID: ${reqId}] Spawning command: "${YT_DLP_PATH}" with args:`, JSON.stringify(args));
   sendEvent('status', { phase: 'starting', message: 'Initializing download queue...' });
 
   const child = spawn(YT_DLP_PATH, args);
 
   child.on('error', (err) => {
-    console.error('Failed to start yt-dlp process in /api/download:', err);
+    console.error(`[REQ ID: ${reqId}] Failed to start yt-dlp process in /api/download:`, err);
     sendEvent('error', { message: 'Failed to start downloader process.' });
     res.end();
   });
@@ -243,7 +282,10 @@ app.get('/api/download', async (req, res) => {
   const progressRegex = /\[download\]\s+(\d+(?:\.\d+)?)%\s+of\s+(\S+)\s+at\s+(\S+)\s+ETA\s+(\S+)/;
   
   child.stdout.on('data', (data) => {
-    const lines = data.toString().split('\n');
+    const rawChunk = data.toString();
+    console.log(`[REQ ID: ${reqId}] yt-dlp stdout:`, rawChunk.trim());
+    
+    const lines = rawChunk.split('\n');
     for (const line of lines) {
       if (line.trim() === '') continue;
 
@@ -265,14 +307,13 @@ app.get('/api/download', async (req, res) => {
 
   child.stderr.on('data', (data) => {
     const line = data.toString().trim();
-    if (line && !line.includes('WARNING')) {
-      console.warn(`yt-dlp stderr [${fileId}]:`, line);
-    }
+    console.log(`[REQ ID: ${reqId}] yt-dlp stderr:`, line);
   });
 
   child.on('close', (code) => {
+    console.log(`[REQ ID: ${reqId}] yt-dlp process closed with code: ${code}`);
     if (code !== 0) {
-      console.error(`yt-dlp failed on download with code ${code}`);
+      console.error(`[REQ ID: ${reqId}] yt-dlp failed on download with code ${code}`);
       sendEvent('error', { message: 'Conversion or download failed. Please check the link and try again.' });
       res.end();
       return;
@@ -352,6 +393,102 @@ app.post('/api/update', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
+// -------------------------------------------------------------
+// DIAGNOSTICS ENDPOINTS & HELPERS (Isolated block)
+// -------------------------------------------------------------
+function logEnvironmentDetails(reqId) {
+  console.log(`[REQ ID: ${reqId}] --- Diagnostics Environment Info ---`);
+  console.log(`[REQ ID: ${reqId}] YT_DLP_PATH: ${YT_DLP_PATH}`);
+  console.log(`[REQ ID: ${reqId}] Platform: ${process.platform}`);
+  console.log(`[REQ ID: ${reqId}] Arch: ${process.arch}`);
+  console.log(`[REQ ID: ${reqId}] Cwd: ${process.cwd()}`);
+  console.log(`[REQ ID: ${reqId}] Node Version: ${process.version}`);
+  console.log(`[REQ ID: ${reqId}] PATH: ${process.env.PATH}`);
+  
+  const binChecks = [
+    { name: 'python', cmd: 'python', args: ['--version'] },
+    { name: 'python3', cmd: 'python3', args: ['--version'] },
+    { name: 'yt-dlp', cmd: YT_DLP_PATH, args: ['--version'] },
+    { name: 'ffmpeg', cmd: ffmpegPath || 'ffmpeg', args: ['-version'] }
+  ];
+  
+  binChecks.forEach(c => {
+    let pathResult = 'unknown';
+    try {
+      if (path.isAbsolute(c.cmd)) {
+        pathResult = fs.existsSync(c.cmd) ? c.cmd : 'not found';
+      } else {
+        const whichCmd = isWindows ? `where "${c.cmd}"` : `which "${c.cmd}"`;
+        pathResult = execSync(whichCmd, { stdio: 'pipe' }).toString().trim().split('\n')[0];
+      }
+      console.log(`[REQ ID: ${reqId}] which ${c.name} -> ${pathResult}`);
+    } catch (e) {
+      console.log(`[REQ ID: ${reqId}] which ${c.name} -> NOT FOUND / ERROR: ${e.message}`);
+    }
+    try {
+      const versionResult = execSync(`"${c.cmd}" ${c.args.join(' ')}`, { stdio: 'pipe' }).toString().trim().split('\n')[0];
+      console.log(`[REQ ID: ${reqId}] ${c.name} version -> ${versionResult}`);
+    } catch (e) {
+      console.log(`[REQ ID: ${reqId}] ${c.name} version -> ERROR: ${e.message}`);
+    }
+  });
+  console.log(`[REQ ID: ${reqId}] ------------------------------------------`);
+}
+
+app.get('/api/debug', (req, res) => {
+  const getDetails = (name, cmd, args = ['--version']) => {
+    let resolvedPath = 'unknown';
+    let resolvedVersion = 'unknown';
+    try {
+      if (path.isAbsolute(cmd)) {
+        resolvedPath = fs.existsSync(cmd) ? cmd : 'not found';
+      } else {
+        const whichCmd = isWindows ? `where "${cmd}"` : `which "${cmd}"`;
+        resolvedPath = execSync(whichCmd, { stdio: 'pipe' }).toString().trim().split('\n')[0];
+      }
+    } catch (e) {
+      resolvedPath = `not found: ${e.message}`;
+    }
+    try {
+      resolvedVersion = execSync(`"${cmd}" ${args.join(' ')}`, { stdio: 'pipe' }).toString().trim().split('\n')[0];
+    } catch (e) {
+      resolvedVersion = `error: ${e.message}`;
+    }
+    return { path: resolvedPath, version: resolvedVersion };
+  };
+
+  const pythonInfo = getDetails('python', 'python', ['--version']);
+  const python3Info = getDetails('python3', 'python3', ['--version']);
+  const ytDlpInfo = getDetails('yt-dlp', YT_DLP_PATH, ['--version']);
+  const ffmpegInfo = getDetails('ffmpeg', ffmpegPath || 'ffmpeg', ['-version']);
+
+  res.json({
+    nodeVersion: process.version,
+    platform: process.platform,
+    cwd: process.cwd(),
+    python: pythonInfo.path,
+    pythonVersion: pythonInfo.version,
+    python3: python3Info.path,
+    ytDlp: ytDlpInfo.path,
+    ytDlpVersion: ytDlpInfo.version,
+    ffmpeg: ffmpegInfo.path,
+    ffmpegVersion: ffmpegInfo.version,
+    environment: process.env.NODE_ENV || 'development',
+    uptime: process.uptime(),
+    memoryUsage: process.memoryUsage(),
+    status: 'OK'
+  });
+});
+
+app.get('/api/health', (req, res) => {
+  res.json({
+    status: 'healthy',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime()
+  });
+});
+// -------------------------------------------------------------
 
 // Automatic clean up routine for orphaned downloads (older than 15 mins)
 setInterval(() => {
